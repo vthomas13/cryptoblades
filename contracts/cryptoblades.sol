@@ -77,10 +77,8 @@ contract CryptoBlades is Initializable, AccessControlUpgradeable {
     int128 public fightRewardBaseline;
     int128 public fightRewardGasOffset;
 
-    int128 public burnWeaponFee;
     int128 public mintWeaponFee;
     int128 public reforgeWeaponFee;
-    int128 public reforgeWeaponWithDustFee;
 
     uint256 nonce;
 
@@ -93,6 +91,9 @@ contract CryptoBlades is Initializable, AccessControlUpgradeable {
 
     int128 public oneFrac; // 1.0
     int128 public fightTraitBonus; // 7.5%
+
+    int128 public burnWeaponFee;
+    int128 public reforgeWeaponWithDustFee;
 
     event FightOutcome(address indexed owner, uint256 indexed character, uint256 weapon, uint32 target, uint24 playerRoll, uint24 enemyRoll, uint16 xpGain, uint256 skillGain);
 
@@ -507,9 +508,8 @@ contract CryptoBlades is Initializable, AccessControlUpgradeable {
 
     function setReforgeWeaponValue(uint256 cents) public restricted {
         int128 newReforgeWeaponFee = ABDKMath64x64.divu(cents, 100);
-        int128 newReforgeWeaponWithDustFee = ABDKMath64x64.divu(cents, 100) - burnWeaponFee;
-        require(newReforgeWeaponWithDustFee > 0, "Reforge fee must include burn fee");
-        reforgeWeaponWithDustFee = newReforgeWeaponWithDustFee;
+        require(newReforgeWeaponFee > burnWeaponFee, "Reforge fee must include burn fee");
+        reforgeWeaponWithDustFee = newReforgeWeaponFee - burnWeaponFee;
         reforgeWeaponFee = newReforgeWeaponFee;
     }
 
