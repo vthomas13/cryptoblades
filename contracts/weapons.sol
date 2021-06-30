@@ -386,12 +386,26 @@ contract Weapons is Initializable, ERC721Upgradeable, AccessControlUpgradeable, 
         return uint16(burnDust[msg.sender] >> (stars * 16));
     }
 
+    function _decrementDustSupply(address playerAddress, uint8 stars) internal {
+        require(getDustSupply(stars) > 0, "Dust supply needed");
+        burnDust[playerAddress] -= (uint256(1) << (stars * 16));
+    }
+
+    function _incrementDustSupply(address playerAddress, uint8 stars) internal {
+        require(getDustSupply(stars) < 65535, "Dust supply capped");
+        burnDust[playerAddress] += (uint256(1) << (stars * 16));
+    }
+
     function burn(uint256 burnID) public restricted {
         Weapon storage burning = tokens[burnID];
         uint8 stars = getStarsFromProperties(burning.properties);
+
+        // While this may seem redundant, _burn could fail so
+        // dust cannot be pre-incremented.
         require(getDustSupply(stars) < 65535, "Dust supply capped");
+
         _burn(burnID);
-        burnDust[msg.sender] += (uint256(1) << (stars * 16));
+        _incrementDustSupply(msg.sender, stars);
 
         emit Burned(
             ownerOf(burnID),
@@ -402,6 +416,8 @@ contract Weapons is Initializable, ERC721Upgradeable, AccessControlUpgradeable, 
     function reforge(uint256 reforgeID, uint256 burnID) public restricted {
         Weapon storage burning = tokens[burnID];
         uint8 stars = getStarsFromProperties(burning.properties);
+
+        // Note: preexisting issue of applying burn points even if _burn fails.
         applyBurnPoints(reforgeID, stars);
         _burn(burnID);
 
@@ -417,9 +433,12 @@ contract Weapons is Initializable, ERC721Upgradeable, AccessControlUpgradeable, 
     }
 
     function reforgeWithDust(uint256 reforgeID, uint8 stars) public restricted {
+        // While this may seem redundant, applyBurnPoints could fail so
+        // dust cannot be pre-decremented.
         require(getDustSupply(stars) > 0, "Dust supply needed");
+
         applyBurnPoints(reforgeID, stars);
-        burnDust[msg.sender] -= (uint256(1) << (stars * 16));
+        _decrementDustSupply(msg.sender, stars);
 
         WeaponBurnPoints storage wbp = burnPoints[reforgeID];
         emit ReforgedWithDust(
