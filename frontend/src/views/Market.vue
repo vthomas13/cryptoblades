@@ -161,6 +161,13 @@
                 <b-button
                   variant="primary"
                   v-if="ownListedNftSelected"
+                  @click="updateNftListingTargetBuyer()"  class="gtag-link-others" tagname="change_price">Change Target Buyer</b-button>
+              </div>
+
+              <div class="col">
+                <b-button
+                  variant="primary"
+                  v-if="ownListedNftSelected"
                   v-tooltip="'Cancelled sales cannot be re-listed for 24 hours!'"
                   @click="cancelNftListing()"  class="gtag-link-others" tagname="cancel_listing">Cancel Listing</b-button>
               </div>
@@ -242,15 +249,24 @@
                   v-if="activeType === 'weapon'"
                    class="gtag-link-others" tagname="add_listing_weapon"
                   :disabled="selectedNftId === null || selectedNftOnCooldown"
-                  @click="addListingForNft()">List Weapon <b-icon-question-circle :hidden=!weaponMarketTax
+                  @click="showListingSetupModal()">List Weapon <b-icon-question-circle :hidden=!weaponMarketTax
                   v-tooltip.bottom="weaponMarketTax + '% tax (paid by the buyer) will be added to the final price.'"/></b-button>
                 <b-button
                   variant="primary"
                   v-if="activeType === 'character'"
                   :disabled="selectedNftId === null || selectedNftOnCooldown"
                    class="gtag-link-others" tagname="add_listing_character"
-                  @click="addListingForNft()">List Character <b-icon-question-circle :hidden=!characterMarketTax
+                  @click="showListingSetupModal()">List Character <b-icon-question-circle :hidden=!characterMarketTax
                   v-tooltip.bottom="characterMarketTax + '% tax (paid by the buyer) will be added to the final price.'"/></b-button>
+
+                <b-modal class="centered-modal" ref="listing-setup-modal"
+                  @ok="addListingForNft">
+                  <template #modal-title>
+                    Sell {{activeType}}
+                  </template>
+                  <b-form-input class="modal-input" v-model="listingSellPrice" placeholder="Sell Price (SKILL)" />
+                  <b-form-input class="modal-input" v-model="listingTargetBuyer" placeholder="Target Buyer Address (optional)" />
+                </b-modal>
               </div>
 
               <div class="col">
@@ -298,6 +314,7 @@
 <script lang="ts">
 import assert from 'assert';
 import Vue from 'vue';
+import { BModal } from 'bootstrap-vue';
 import CharacterList from '../components/smart/CharacterList.vue';
 import WeaponGrid from '../components/smart/WeaponGrid.vue';
 import Hint from '../components/Hint.vue';
@@ -312,6 +329,7 @@ type SellType = 'weapon' | 'character';
 type WeaponId = string;
 type CharacterId = string;
 type NftId = WeaponId | CharacterId;
+const defaultTargetBuyer = '0x0000000000000000000000000000000000000000';
 
 interface Data {
   activeType: SellType;
@@ -323,8 +341,11 @@ interface Data {
   marketOutcome: string | null;
   waitingMarketOutcome: boolean;
   nftPricesById: Record<string, string>;
+  nftTargetBuyersById: Record<string, string>;
   characterMarketTax: string;
-  weaponMarketTax: string ;
+  weaponMarketTax: string;
+  listingSellPrice: string;
+  listingTargetBuyer: string;
 }
 
 type StoreMappedState = Pick<IState, 'defaultAccount' | 'weapons' | 'characters' | 'ownedCharacterIds' | 'ownedWeaponIds'>;
@@ -337,12 +358,18 @@ interface StoreMappedActions {
   fetchAllMarketNftIds(payload: { nftContractAddr: string }): Promise<string[]>;
   fetchMarketNftIdsBySeller(payload: { nftContractAddr: string, sellerAddr: string }): Promise<string[]>;
   fetchMarketNftPrice(payload: { nftContractAddr: string, tokenId: string | number }): Promise<string>;
+  fetchMarketNftTargetBuyer(payload: { nftContractAddr: string, tokenId: string | number }): Promise<string>;
   fetchMarketTax(payload: { nftContractAddr: string }): Promise<string>;
   checkMarketItemOwnership(payload: { nftContractAddr: string, tokenId: string | number}): Promise<string>;
-  addMarketListing(payload: { nftContractAddr: string, tokenId: string, price: string }): Promise<{ seller: string, nftID: string, price: string }>;
+  addMarketListing(
+    payload: { nftContractAddr: string, tokenId: string, price: string, targetBuyer: string }
+  ): Promise<{ seller: string, nftID: string, price: string, targetBuyer: string }>;
   changeMarketListingPrice(
     payload: { nftContractAddr: string, tokenId: string, newPrice: string }
   ): Promise<{ seller: string, nftID: string, newPrice: string }>;
+  changeMarketListingTargetBuyer(
+    payload: { nftContractAddr: string, tokenId: string, newTargetBuyer: string }
+  ): Promise<{ seller: string, nftID: string, newTargetBuyer: string }>;
   cancelMarketListing(payload: { nftContractAddr: string, tokenId: string }): Promise<{ seller: string, nftID: string }>;
   purchaseMarketListing(payload: { nftContractAddr: string, tokenId: string, maxPrice: string }): Promise<{ seller: string, nftID: string, price: string }>;
   fetchSellerOfNft(payload: { nftContractAddr: string, tokenId: string }): Promise<string>;
@@ -362,8 +389,11 @@ export default Vue.extend({
       marketOutcome: null,
       waitingMarketOutcome: false,
       nftPricesById: {},
+      nftTargetBuyersById: {},
       characterMarketTax: '',
       weaponMarketTax: '',
+      listingSellPrice: '',
+      listingTargetBuyer: '',
     } as Data;
   },
 
@@ -409,7 +439,7 @@ export default Vue.extend({
       && (this.activeType === 'weapon'
         ? (this.transferCooldownOfWeaponId(+this.selectedNftId) > 0)
         : (this.transferCooldownOfCharacterId(+this.selectedNftId) > 0));
-    }
+    },
   },
 
   methods: {
@@ -417,10 +447,12 @@ export default Vue.extend({
       'fetchAllMarketNftIds',
       'fetchMarketNftIdsBySeller',
       'fetchMarketNftPrice',
+      'fetchMarketNftTargetBuyer',
       'fetchMarketTax',
       'checkMarketItemOwnership',
       'addMarketListing',
       'changeMarketListingPrice',
+      'changeMarketListingTargetBuyer',
       'cancelMarketListing',
       'purchaseMarketListing',
       'fetchSellerOfNft',
@@ -436,6 +468,14 @@ export default Vue.extend({
       this.marketOutcome = null;
       this.waitingMarketOutcome = false;
       this.nftPricesById = {};
+      this.nftTargetBuyersById = {};
+      this.listingSellPrice = '';
+      this.listingTargetBuyer = '';
+    },
+
+    showListingSetupModal() {
+      this.clearInputs();
+      (this.$refs['listing-setup-modal'] as BModal).show();
     },
 
     async loadMarketTaxes() {
@@ -470,6 +510,15 @@ export default Vue.extend({
       });
     },
 
+    async lookupNftTargetBuyer(nftId: NftId) {
+      if(!this.contractAddress) return;
+
+      return await this.fetchMarketNftTargetBuyer({
+        nftContractAddr: this.contractAddress,
+        tokenId: nftId,
+      });
+    },
+
     async fetchNftPrices(nftIds: NftId[]) {
       if(!this.contractAddress) return;
 
@@ -481,14 +530,23 @@ export default Vue.extend({
       }));
     },
 
+    async fetchNftTargetBuyers(nftIds: NftId[]) {
+      if(!this.contractAddress) return;
+
+      await Promise.all(nftIds.map(async nftId => {
+        const targetBuyer = (await this.lookupNftTargetBuyer(nftId))!;
+
+        void targetBuyer;
+        this.nftTargetBuyersById[nftId] = targetBuyer;
+      }));
+    },
+
     async addListingForNft() {
       this.marketOutcome = null;
       if(this.selectedNftId === null) return;
+      if(!this.listingSellPrice) return;
 
-      const sellFor = await (this as any).$dialog.prompt({ title: `Sell ${this.activeType}`, text: 'Sell Price (SKILL)' });
-      if(!sellFor) return;
-
-      const val = +sellFor;
+      const val = +this.listingSellPrice;
       if(val <= 0 || !val || isNaN(val)) return;
 
       this.waitingMarketOutcome = true;
@@ -496,7 +554,8 @@ export default Vue.extend({
       const results = await this.addMarketListing({
         nftContractAddr: this.contractAddress,
         tokenId: this.selectedNftId,
-        price: this.convertSkillToWei(sellFor)
+        price: this.convertSkillToWei(this.listingSellPrice),
+        targetBuyer: this.listingTargetBuyer || defaultTargetBuyer
       });
 
       this.selectedNftId = null;
@@ -531,6 +590,28 @@ export default Vue.extend({
         +this.activeType+' '+results.nftID+' to '+this.convertWeiToSkill(results.newPrice)+' SKILL';
     },
 
+    async updateNftListingTargetBuyer() {
+
+      this.marketOutcome = null;
+      if(this.selectedNftId === null) return;
+
+      let targetBuyer = await (this as any).$dialog.prompt({ title: `Sell ${this.activeType}`, text: 'Target Buyer Address (optional)' });
+      if(!targetBuyer) targetBuyer = defaultTargetBuyer;
+
+      this.waitingMarketOutcome = true;
+
+      const results = await this.changeMarketListingTargetBuyer({
+        nftContractAddr: this.contractAddress,
+        tokenId: this.selectedNftId,
+        newTargetBuyer: targetBuyer
+      });
+
+      this.selectedNftId = null;
+      this.waitingMarketOutcome = false;
+      this.marketOutcome = 'Successfully changed target buyer for '
+        +this.activeType+' '+results.nftID+' to '+results.newTargetBuyer;
+    },
+
     async purchaseNft() {
       this.marketOutcome = null;
       if(this.selectedNftId === null) return;
@@ -558,7 +639,7 @@ export default Vue.extend({
         nftContractAddr: this.contractAddress
       });
 
-      this.allSearchResults = results2;
+      this.allSearchResults = await this.filterOutTargetBuyers(results2) as string[];
 
       this.allSearchResults = Array.from(this.allSearchResults).filter((x: any) => x.id !== this.selectedNftId);
 
@@ -595,12 +676,13 @@ export default Vue.extend({
       const results = await this.fetchAllMarketNftIds({
         nftContractAddr: this.contractAddress
       });
+      await this.fetchNftTargetBuyers(results);
 
       // searchResultsOwned does not mesh with this function
       // will need per-result checking of it, OR filtering out own NFTs
       //this.searchResultsOwned = nftSeller === this.defaultAccount;
       this.searchResultsOwned = false; // temp
-      this.allSearchResults = results;
+      this.allSearchResults = await this.filterOutTargetBuyers(results) as string[];
 
       this.waitingMarketOutcome = false;
       this.marketOutcome = null;
@@ -619,7 +701,7 @@ export default Vue.extend({
 
       const price = await this.lookupNftPrice(this.search);
       if(price !== '0') {
-        this.searchResults = [this.search];
+        this.searchResults = await this.filterOutTargetBuyers([this.search]) as string[];
       } else {
         this.searchResults = [];
       }
@@ -641,7 +723,7 @@ export default Vue.extend({
 
         this.searchResultsOwned = this.search === this.defaultAccount;
         this.waitingMarketOutcome = false;
-        this.searchResults = result;
+        this.searchResults = await this.filterOutTargetBuyers(result) as string[];
 
       } catch {
         this.searchResultsOwned = false;
@@ -668,6 +750,25 @@ export default Vue.extend({
       this.searchResultsOwned = true;
       this.waitingMarketOutcome = false;
       this.searchResults = result;
+    },
+
+    async filterOutTargetBuyers(nftIds: NftId[]) {
+      if(!this.contractAddress) return;
+      const results: string[] = [];
+
+      await Promise.all(nftIds.map(async nftId => {
+        const targetBuyer = (await this.lookupNftTargetBuyer(nftId))!;
+        if(targetBuyer === defaultTargetBuyer || targetBuyer === this.defaultAccount) {
+          results.push(nftId);
+        }
+      }));
+
+      return results;
+    },
+
+    clearInputs() {
+      this.listingSellPrice = '';
+      this.listingTargetBuyer = '';
     },
 
     convertWeiToSkill(wei: string) {
@@ -751,6 +852,11 @@ export default Vue.extend({
   margin: auto;
   text-align: center;
   font-size: 1em;
+}
+
+.modal-input {
+  margin-bottom: 5px;
+  margin-top: 5px;
 }
 
 </style>
