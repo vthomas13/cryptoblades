@@ -637,7 +637,7 @@ export default Vue.extend({
         nftContractAddr: this.contractAddress
       });
 
-      this.allSearchResults = await this.filterOutTargetBuyers(results2) as string[];
+      this.allSearchResults = await this.filterOutTargetBuyers(results2);
 
       this.allSearchResults = Array.from(this.allSearchResults).filter((x: any) => x.id !== this.selectedNftId);
 
@@ -680,7 +680,7 @@ export default Vue.extend({
       // will need per-result checking of it, OR filtering out own NFTs
       //this.searchResultsOwned = nftSeller === this.defaultAccount;
       this.searchResultsOwned = false; // temp
-      this.allSearchResults = await this.filterOutTargetBuyers(results) as string[];
+      this.allSearchResults = await this.filterOutTargetBuyers(results);
 
       this.waitingMarketOutcome = false;
       this.marketOutcome = null;
@@ -699,7 +699,7 @@ export default Vue.extend({
 
       const price = await this.lookupNftPrice(this.search);
       if(price !== '0') {
-        this.searchResults = await this.filterOutTargetBuyers([this.search]) as string[];
+        this.searchResults = await this.filterOutTargetBuyers([this.search]);
       } else {
         this.searchResults = [];
       }
@@ -721,7 +721,7 @@ export default Vue.extend({
 
         this.searchResultsOwned = this.search === this.defaultAccount;
         this.waitingMarketOutcome = false;
-        this.searchResults = await this.filterOutTargetBuyers(result) as string[];
+        this.searchResults = await this.filterOutTargetBuyers(result);
 
       } catch {
         this.searchResultsOwned = false;
@@ -750,8 +750,8 @@ export default Vue.extend({
       this.searchResults = result;
     },
 
-    async filterOutTargetBuyers(nftIds: NftId[]) {
-      if(!this.contractAddress) return;
+    async filterOutTargetBuyers(nftIds: NftId[]): Promise<string[]> {
+      if(!this.contractAddress) return [];
       const results: string[] = [];
 
       await Promise.all(nftIds.map(async nftId => {

@@ -51,7 +51,6 @@ contract NFTMarket is
         address seller;
         uint256 price;
         //int128 usdTether; // this would be to "tether" price dynamically to our oracle
-        address targetBuyer;
     }
 
     // ############
@@ -65,6 +64,8 @@ contract NFTMarket is
     mapping(address => mapping(uint256 => Listing)) private listings;
     // address is IERC721 -- kept like this because of OpenZeppelin upgrade plugin bug
     mapping(address => EnumerableSet.UintSet) private listedTokenIDs;
+    // keeps target buyer for nftId of specific type (address)
+    mapping(address => mapping(uint256 => address)) nftTargetBuyers;
     // address is IERC721
     EnumerableSet.AddressSet private listedTokenTypes; // stored for a way to know the types we have on offer
 
@@ -174,8 +175,8 @@ contract NFTMarket is
         _;
     }
 
-    modifier userAllowedToPurchase(IERC721 _tokenAddress, uint256 id) {
-        require(listings[address(_tokenAddress)][id].targetBuyer == address(0) || listings[address(_tokenAddress)][id].targetBuyer == msg.sender, "Not target buyer");
+    modifier userAllowedToPurchase(IERC721 _tokenAddress, uint256 _id) {
+        require(nftTargetBuyers[address(_tokenAddress)][_id] == address(0) || nftTargetBuyers[address(_tokenAddress)][_id] == msg.sender, "Not target buyer");
         _;
     }
 
@@ -325,7 +326,7 @@ contract NFTMarket is
         view
         returns (address)
     {
-        return listings[address(_tokenAddress)][_id].targetBuyer;
+        return nftTargetBuyers[address(_tokenAddress)][_id];
     }
 
     // ############
@@ -343,7 +344,8 @@ contract NFTMarket is
         isValidERC721(_tokenAddress)
         isNotListed(_tokenAddress, _id)
     {
-        listings[address(_tokenAddress)][_id] = Listing(msg.sender, _price, _targetBuyer);
+        listings[address(_tokenAddress)][_id] = Listing(msg.sender, _price);
+        nftTargetBuyers[address(_tokenAddress)][_id] = _targetBuyer;
         listedTokenIDs[address(_tokenAddress)].add(_id);
 
         _updateListedTokenTypes(_tokenAddress);
@@ -383,7 +385,7 @@ contract NFTMarket is
         isListed(_tokenAddress, _id)
         isSeller(_tokenAddress, _id)
     {
-        listings[address(_tokenAddress)][_id].targetBuyer = _newTargetBuyer;
+        nftTargetBuyers[address(_tokenAddress)][_id] = _newTargetBuyer;
         emit ListingTargetBuyerChange(
             msg.sender,
             _tokenAddress,
