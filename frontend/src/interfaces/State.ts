@@ -75,6 +75,8 @@ export interface IState {
   characterStaminas: Record<number, number>;
 
   weapons: Record<number, IWeapon>;
+  weaponDurabilities: Record<number, number>;
+  maxDurability: number;
   targetsByCharacterIdAndWeaponId: Record<number, Record<number, ITarget>>;
 
   characterTransferCooldowns: Record<number, ITransferCooldown | undefined>;
