@@ -82,8 +82,8 @@ export default {
   }),
 
   computed: {
-    ...mapState(['skillBalance', 'defaultAccount', 'currentNetworkId', 'currentCharacterId', 'staking']),
-    ...mapGetters(['contracts', 'ownCharacters', 'getExchangeUrl', 'availableStakeTypes', 'hasStakedBalance']),
+    ...mapState(['skillBalance', 'defaultAccount', 'currentNetworkId', 'currentCharacterId', 'staking', 'currentWeaponId']),
+    ...mapGetters(['contracts', 'ownCharacters', 'getExchangeUrl', 'availableStakeTypes', 'hasStakedBalance', 'ownWeapons']),
 
     canShowApp() {
       return this.contracts !== null && !_.isEmpty(this.contracts) && !this.showNetworkError;
@@ -106,6 +106,11 @@ export default {
     async currentCharacterId() {
       await this.updateCurrentCharacterStamina();
     },
+
+    async currentWeaponId() {
+      await this.updateCurrentWeaponDurability();
+    },
+
     $route(to) {
       // react to route changes
       window.gtag('event', 'page_view', {
@@ -121,6 +126,7 @@ export default {
     ...mapActions({ initializeStore: 'initialize' }),
     ...mapActions([
       'fetchCharacterStamina',
+      'fetchWeaponDurability',
       'pollAccountsAndNetwork',
       'fetchWeaponTransferCooldownForOwnWeapons',
       'fetchCharacterTransferCooldownForOwnCharacters',
@@ -134,6 +140,14 @@ export default {
 
       if (this.currentCharacterId !== null) {
         await this.fetchCharacterStamina(this.currentCharacterId);
+      }
+    },
+
+    async updateCurrentWeaponDurability() {
+      if (this.featureFlagStakeOnly) return;
+
+      if (this.currentWeaponId !== null) {
+        await this.fetchWeaponDurability(this.currentWeaponId);
       }
     },
 

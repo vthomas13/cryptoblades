@@ -69,6 +69,7 @@ export function weaponFromContract(id: string | number, data: string[]): IWeapon
   const pommel = data[8];
   const burnPoints = +data[9];
   const bonusPower = +data[10];
+  const durabilityTimestamp = data[11];
 
   const stat1Value = +stat1;
   const stat2Value = +stat2;
@@ -98,7 +99,8 @@ export function weaponFromContract(id: string | number, data: string[]): IWeapon
     lowStarBurnPoints,
     fourStarBurnPoints,
     fiveStarBurnPoints,
-    bonusPower
+    bonusPower,
+    durabilityTimestamp
   };
 }
 
