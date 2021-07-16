@@ -514,7 +514,7 @@ export default {
 
 .name {
   position: absolute;
-  bottom: 10px;
+  bottom: 15px;
   left: 12%;
   right: 12%;
   font-size: 0.9em;
